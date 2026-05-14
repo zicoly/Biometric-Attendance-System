@@ -1,63 +1,77 @@
-import api from "./api";
-import {
-  StudentSignupPayload,
-  StudentLoginPayload,
-  AuthResponse,
-} from "../types/student.types";
+// student-app/src/services/authService.ts
+import { api } from "./api";
+import { secureStore } from "../utils/secureStore";
+import { User, AuthResponse } from "../types/student.types";
 
-/**
- * Register a new student account.
- * POST /api/students/auth/signup
- */
-export const studentSignup = async (
-  data: StudentSignupPayload,
-): Promise<{ message: string }> => {
-  const response = await api.post<{ message: string }>(
-    "/students/auth/signup",
-    data,
-  );
-  return response.data;
-};
+interface RegisterData {
+  fullName: string;
+  matricNumber: string;
+  email: string;
+  password: string;
+  department: string;
+  level: number;
+}
 
-/**
- * Login with email/matric + password.
- * POST /api/students/auth/login
- * Returns: JWT access token, refresh token, and student profile.
- */
-export const studentLogin = async (
-  data: StudentLoginPayload,
-): Promise<AuthResponse> => {
-  const response = await api.post<AuthResponse>("/students/auth/login", data);
-  return response.data;
-};
+interface LoginData {
+  emailOrMatric: string;
+  password: string;
+}
 
-/**
- * Logout — invalidates token on the server.
- * POST /api/students/auth/logout
- */
-export const studentLogout = async (): Promise<void> => {
-  await api.post("/students/auth/logout");
-};
+const unwrap = (raw: any) => raw?.data ?? raw;
 
-/**
- * Fetch the currently authenticated student's profile.
- * GET /api/students/me
- * Useful to restore session on app start.
- */
-export const getStudentProfile = async (): Promise<AuthResponse["student"]> => {
-  const response = await api.get<AuthResponse["student"]>("/students/me");
-  return response.data;
-};
+export const authService = {
+  async register(
+    data: RegisterData,
+  ): Promise<{ user: User; accessToken: string }> {
+    const response = await api.post("/auth/register", {
+      ...data,
+      role: "student",
+    });
+    const unwrapped = unwrap(response.data);
+    const user = unwrapped.user;
+    const accessToken = unwrapped.tokens?.accessToken;
+    const refreshToken = unwrapped.tokens?.refreshToken;
 
-/**
- * Refresh the access token using the refresh token.
- * POST /api/students/auth/refresh
- */
-export const refreshAccessToken = async (
-  refreshToken: string,
-): Promise<{ token: string }> => {
-  const response = await api.post<{ token: string }>("/students/auth/refresh", {
-    refreshToken,
-  });
-  return response.data;
+    if (accessToken) {
+      await secureStore.setToken(accessToken);
+    }
+    if (refreshToken) {
+      await secureStore.setRefreshToken(refreshToken);
+    }
+
+    return { user, accessToken };
+  },
+
+  async login(data: LoginData): Promise<{ user: User; accessToken: string }> {
+    const response = await api.post("/auth/login", data);
+    const unwrapped = unwrap(response.data);
+    const user = unwrapped.user;
+    const accessToken = unwrapped.tokens?.accessToken;
+    const refreshToken = unwrapped.tokens?.refreshToken;
+
+    if (accessToken) {
+      await secureStore.setToken(accessToken);
+    }
+    if (refreshToken) {
+      await secureStore.setRefreshToken(refreshToken);
+    }
+
+    return { user, accessToken };
+  },
+
+  async getMe(): Promise<User> {
+    const response = await api.get("/auth/me");
+    const unwrapped = unwrap(response.data);
+    return unwrapped;
+  },
+
+  async logout(): Promise<void> {
+    try {
+      await api.post("/auth/logout");
+    } catch (error) {
+      // Ignore logout errors
+    } finally {
+      await secureStore.clearAll();
+    }
+  },
 };

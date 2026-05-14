@@ -1,66 +1,130 @@
-import { useState, useEffect } from 'react'
-import * as LocalAuthentication from 'expo-local-authentication'
-
-interface BiometricState {
-  isAvailable: boolean
-  isEnrolled: boolean
-  biometricType: string | null
-}
+// student-app/src/hooks/useBiometric.ts
+import { useState } from "react";
+import { secureStore } from "../utils/secureStore";
+import { studentService } from "../services/studentService";
+import * as Device from "expo-device";
+import { authenticateWithBiometrics, generateKeyPair, isBiometricAvailable, signChallenge } from "../utils/cryto";
 
 export const useBiometric = () => {
-  const [state, setState] = useState<BiometricState>({
-    isAvailable: false,
-    isEnrolled: false,
-    biometricType: null,
-  })
+  const [isAvailable, setIsAvailable] = useState(false);
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    checkBiometricSupport()
-  }, [])
+  const checkBiometricAvailability = async () => {
+    const available = await isBiometricAvailable();
+    setIsAvailable(available);
+    return available;
+  };
 
-  const checkBiometricSupport = async () => {
+  const checkDeviceRegistration = async () => {
+    const deviceId = await secureStore.getDeviceId();
+    if (!deviceId) return false;
+
     try {
-      // Check if device hardware supports biometrics
-      const compatible = await LocalAuthentication.hasHardwareAsync()
-      if (!compatible) {
-        setState({ isAvailable: false, isEnrolled: false, biometricType: null })
-        return
+      const devices = await studentService.getRegisteredDevices();
+      const registered = devices.some((d) => d.deviceId === deviceId);
+      setIsRegistered(registered);
+      return registered;
+    } catch {
+      return false;
+    }
+  };
+
+  const registerDevice = async () => {
+    setIsLoading(true);
+    try {
+      // Generate device ID
+      const deviceId =
+        Device.deviceName || Device.modelName || `device_${Date.now()}`;
+      const deviceName = Device.deviceName || "Unknown Device";
+
+      // Generate key pair
+      const { publicKey, privateKey } = await generateKeyPair();
+
+      // Store private key securely
+      await secureStore.setPrivateKey(privateKey);
+      await secureStore.setDeviceId(deviceId);
+
+      // Register with backend
+      await studentService.registerDevice(deviceId, deviceName, publicKey);
+
+      setIsRegistered(true);
+      return { success: true, deviceId };
+    } catch (error) {
+      console.error("[Biometric] Registration failed:", error);
+      return { success: false, error: String(error) };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const markAttendanceWithBiometric = async (
+    sessionId: string,
+    location?: { latitude: number; longitude: number },
+  ) => {
+    setIsLoading(true);
+    try {
+      // 1. Check device registration
+      const deviceId = await secureStore.getDeviceId();
+      if (!deviceId) {
+        return {
+          success: false,
+          error: "Device not registered. Please setup biometrics first.",
+        };
       }
 
-      // Check if biometrics are enrolled
-      const enrolled = await LocalAuthentication.isEnrolledAsync()
+      // 2. Get challenge from server
+      const challengeData =
+        await studentService.getBiometricChallenge(deviceId);
 
-      // Get available biometric types
-      const types = await LocalAuthentication.supportedAuthenticationTypesAsync()
-      const biometricType = types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)
-        ? 'Face ID'
-        : types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)
-        ? 'Fingerprint'
-        : 'Biometric'
+      // 3. Authenticate with device biometrics
+      const authSuccess = await authenticateWithBiometrics();
+      if (!authSuccess) {
+        return { success: false, error: "Biometric authentication failed" };
+      }
 
-      setState({ isAvailable: compatible, isEnrolled: enrolled, biometricType })
-    } catch (error) {
-      console.error('Biometric check error:', error)
+      // 4. Sign challenge with private key
+      const privateKey = await secureStore.getPrivateKey();
+      if (!privateKey) {
+        return {
+          success: false,
+          error: "Private key not found. Please re-register device.",
+        };
+      }
+
+      const signature = await signChallenge(
+        challengeData.challenge,
+        privateKey,
+      );
+
+      // 5. Send to server
+      await studentService.markBiometricAttendance(
+        sessionId,
+        deviceId,
+        signature,
+        new Date().toISOString(),
+        location,
+      );
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("[Biometric] Attendance marking failed:", error);
+      return {
+        success: false,
+        error: error.response?.data?.message || "Failed to mark attendance",
+      };
+    } finally {
+      setIsLoading(false);
     }
-  }
+  };
 
-  const authenticate = async (): Promise<boolean> => {
-    if (!state.isAvailable || !state.isEnrolled) return false
-
-    try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Verify your identity',
-        fallbackLabel: 'Use Password',       // iOS fallback label
-        disableDeviceFallback: false,         // allow device PIN as fallback
-        cancelLabel: 'Cancel',
-      })
-
-      return result.success
-    } catch (error) {
-      console.error('Biometric authentication error:', error)
-      return false
-    }
-  }
-
-  return { ...state, authenticate }
-}
+  return {
+    isAvailable,
+    isRegistered,
+    isLoading,
+    checkBiometricAvailability,
+    checkDeviceRegistration,
+    registerDevice,
+    markAttendanceWithBiometric,
+  };
+};

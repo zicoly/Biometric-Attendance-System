@@ -1,199 +1,401 @@
-import React, { useState } from 'react'
+// student-app/src/screens/auth/Signup.tsx
+import React, { useState } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, Alert, ActivityIndicator, Switch
-} from 'react-native'
-import { useForm, Controller } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { useNavigation } from '@react-navigation/native'
-import { studentSignup } from '../../services/authService'
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ActivityIndicator,
+  ScrollView,
+} from "react-native";
+import { useAuthStore } from "../../store/authStore";
+import { StackNavigationProp } from "@react-navigation/stack";
+import { AuthStackParamList } from "../../types/navigation.types";
 
-// --- Picker for level selection (simplified with TouchableOpacity) ---
-const LEVELS = ['100', '200', '300', '400', '500']
+type SignupScreenNavigationProp = StackNavigationProp<
+  AuthStackParamList,
+  "Signup"
+>;
 
-const signupSchema = z.object({
-  fullName: z.string().min(3, 'Full name must be at least 3 characters'),
-  matricNumber: z.string().min(5, 'Enter a valid matric number'),
-  email: z.string().email('Enter a valid email'),
-  department: z.string().min(2, 'Department is required'),
-  level: z.enum(['100', '200', '300', '400', '500']),
-  phone: z.string().optional(),
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(/[A-Z]/, 'Must contain an uppercase letter')
-    .regex(/[0-9]/, 'Must contain a number'),
-  confirmPassword: z.string(),
-  agreedToTerms: z.boolean().refine((v) => v === true, 'You must accept the terms'),
-}).refine((d) => d.password === d.confirmPassword, {
-  path: ['confirmPassword'],
-  message: 'Passwords do not match',
-})
-
-type SignupForm = z.infer<typeof signupSchema>
-
-const StudentSignup: React.FC = () => {
-  const navigation = useNavigation<any>()
-  const [loading, setLoading] = useState(false)
-  const [selectedLevel, setSelectedLevel] = useState<string>('100')
-  const [showLevelPicker, setShowLevelPicker] = useState(false)
-
-  const { control, handleSubmit, setValue, formState: { errors } } = useForm<SignupForm>({
-    resolver: zodResolver(signupSchema),
-    defaultValues: { level: '100', agreedToTerms: false },
-  })
-
-  const onSubmit = async (data: SignupForm) => {
-    setLoading(true)
-    try {
-      await studentSignup(data)
-      Alert.alert('Success', 'Account created! Please log in.', [
-        { text: 'OK', onPress: () => navigation.navigate('Login') }
-      ])
-    } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.message || 'Signup failed.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const FieldError = ({ msg }: { msg?: string }) =>
-    msg ? <Text style={styles.errorText}>{msg}</Text> : null
-
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Create Account</Text>
-      <Text style={styles.subtitle}>Join BioAttend as a student</Text>
-
-      {/* Full Name */}
-      <Text style={styles.label}>Full Name *</Text>
-      <Controller control={control} name="fullName" render={({ field: { onChange, value } }) => (
-        <TextInput style={styles.input} placeholder="Adaeze Nwosu" onChangeText={onChange} value={value} />
-      )} />
-      <FieldError msg={errors.fullName?.message} />
-
-      {/* Matric Number */}
-      <Text style={styles.label}>Matric Number *</Text>
-      <Controller control={control} name="matricNumber" render={({ field: { onChange, value } }) => (
-        <TextInput style={styles.input} placeholder="CSC/2021/001" onChangeText={onChange} value={value} autoCapitalize="characters" />
-      )} />
-      <FieldError msg={errors.matricNumber?.message} />
-
-      {/* Email */}
-      <Text style={styles.label}>Email *</Text>
-      <Controller control={control} name="email" render={({ field: { onChange, value } }) => (
-        <TextInput style={styles.input} placeholder="student@university.edu" onChangeText={onChange} value={value} keyboardType="email-address" autoCapitalize="none" />
-      )} />
-      <FieldError msg={errors.email?.message} />
-
-      {/* Department */}
-      <Text style={styles.label}>Department *</Text>
-      <Controller control={control} name="department" render={({ field: { onChange, value } }) => (
-        <TextInput style={styles.input} placeholder="Computer Science" onChangeText={onChange} value={value} />
-      )} />
-      <FieldError msg={errors.department?.message} />
-
-      {/* Level Picker */}
-      <Text style={styles.label}>Level *</Text>
-      <TouchableOpacity style={styles.input} onPress={() => setShowLevelPicker(!showLevelPicker)}>
-        <Text style={{ color: '#1e293b' }}>{selectedLevel} Level</Text>
-      </TouchableOpacity>
-      {showLevelPicker && (
-        <View style={styles.pickerDropdown}>
-          {LEVELS.map((level) => (
-            <TouchableOpacity
-              key={level}
-              style={styles.pickerItem}
-              onPress={() => {
-                setSelectedLevel(level)
-                setValue('level', level as any)
-                setShowLevelPicker(false)
-              }}
-            >
-              <Text>{level} Level</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-      <FieldError msg={errors.level?.message} />
-
-      {/* Phone (optional) */}
-      <Text style={styles.label}>Phone Number (optional)</Text>
-      <Controller control={control} name="phone" render={({ field: { onChange, value } }) => (
-        <TextInput style={styles.input} placeholder="+234 800 000 0000" onChangeText={onChange} value={value} keyboardType="phone-pad" />
-      )} />
-
-      {/* Password */}
-      <Text style={styles.label}>Password *</Text>
-      <Controller control={control} name="password" render={({ field: { onChange, value } }) => (
-        <TextInput style={styles.input} placeholder="Min. 8 chars" onChangeText={onChange} value={value} secureTextEntry />
-      )} />
-      <FieldError msg={errors.password?.message} />
-
-      {/* Confirm Password */}
-      <Text style={styles.label}>Confirm Password *</Text>
-      <Controller control={control} name="confirmPassword" render={({ field: { onChange, value } }) => (
-        <TextInput style={styles.input} placeholder="Repeat password" onChangeText={onChange} value={value} secureTextEntry />
-      )} />
-      <FieldError msg={errors.confirmPassword?.message} />
-
-      {/* Terms */}
-      <Controller control={control} name="agreedToTerms" render={({ field: { onChange, value } }) => (
-        <View style={styles.row}>
-          <Switch value={value} onValueChange={onChange} trackColor={{ true: '#2563eb' }} />
-          <Text style={styles.termsText}>I agree to the Terms of Service and Privacy Policy</Text>
-        </View>
-      )} />
-      <FieldError msg={errors.agreedToTerms?.message} />
-
-      {/* Submit */}
-      <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleSubmit(onSubmit)}
-        disabled={loading}
-      >
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Account</Text>}
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.linkContainer}>
-        <Text style={styles.link}>Already have an account? Sign In</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  )
+interface Props {
+  navigation: SignupScreenNavigationProp;
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  content: { padding: 24, paddingBottom: 48 },
-  title: { fontSize: 28, fontWeight: '800', color: '#0f172a', marginBottom: 4 },
-  subtitle: { fontSize: 15, color: '#64748b', marginBottom: 28 },
-  label: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6, marginTop: 12 },
-  input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 14,
-    color: '#1e293b',
-  },
-  errorText: { color: '#ef4444', fontSize: 12, marginTop: 4 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16 },
-  termsText: { flex: 1, fontSize: 13, color: '#64748b' },
-  button: {
-    backgroundColor: '#2563eb',
-    borderRadius: 12,
-    padding: 15,
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  linkContainer: { marginTop: 16, alignItems: 'center' },
-  link: { color: '#2563eb', fontSize: 14, fontWeight: '500' },
-  pickerDropdown: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, marginTop: 4 },
-  pickerItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-})
+const DEPARTMENTS = [
+  "Computer Science",
+  "Mathematics",
+  "Physics",
+  "Chemistry",
+  "Engineering",
+];
+const LEVELS = [100, 200, 300, 400, 500];
 
-export default StudentSignup
+export const SignupScreen: React.FC<Props> = ({ navigation }) => {
+  const [formData, setFormData] = useState({
+    fullName: "",
+    matricNumber: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    department: DEPARTMENTS[0],
+    level: 200,
+  });
+  const [showPassword, setShowPassword] = useState(false);
+
+  const { register, isLoading } = useAuthStore();
+
+  const handleSignup = async () => {
+    // Validation
+    if (
+      !formData.fullName ||
+      !formData.matricNumber ||
+      !formData.email ||
+      !formData.password
+    ) {
+      Alert.alert("Error", "Please fill in all fields");
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      Alert.alert("Error", "Passwords do not match");
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters");
+      return;
+    }
+
+    try {
+      await register({
+        fullName: formData.fullName,
+        matricNumber: formData.matricNumber,
+        email: formData.email,
+        password: formData.password,
+        department: formData.department,
+        level: formData.level,
+      });
+      // After registration, user will be navigated to CourseRegistration
+    } catch (err: any) {
+      Alert.alert(
+        "Signup Failed",
+        err.response?.data?.message || "Registration failed",
+      );
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Create Account</Text>
+          <Text style={styles.subtitle}>Register as a student</Text>
+        </View>
+
+        <View style={styles.form}>
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Full Name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="John Doe"
+              value={formData.fullName}
+              onChangeText={(text) =>
+                setFormData({ ...formData, fullName: text })
+              }
+              editable={!isLoading}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Matric Number</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="21/1234CS"
+              value={formData.matricNumber}
+              onChangeText={(text) =>
+                setFormData({ ...formData, matricNumber: text })
+              }
+              autoCapitalize="characters"
+              editable={!isLoading}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="student@university.edu"
+              value={formData.email}
+              onChangeText={(text) => setFormData({ ...formData, email: text })}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              editable={!isLoading}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Department</Text>
+            <View style={styles.pickerContainer}>
+              {DEPARTMENTS.map((dept) => (
+                <TouchableOpacity
+                  key={dept}
+                  style={[
+                    styles.pickerOption,
+                    formData.department === dept && styles.pickerOptionSelected,
+                  ]}
+                  onPress={() => setFormData({ ...formData, department: dept })}
+                >
+                  <Text
+                    style={[
+                      styles.pickerOptionText,
+                      formData.department === dept &&
+                        styles.pickerOptionTextSelected,
+                    ]}
+                  >
+                    {dept}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Level</Text>
+            <View style={styles.levelContainer}>
+              {LEVELS.map((level) => (
+                <TouchableOpacity
+                  key={level}
+                  style={[
+                    styles.levelOption,
+                    formData.level === level && styles.levelOptionSelected,
+                  ]}
+                  onPress={() => setFormData({ ...formData, level })}
+                >
+                  <Text
+                    style={[
+                      styles.levelOptionText,
+                      formData.level === level &&
+                        styles.levelOptionTextSelected,
+                    ]}
+                  >
+                    {level}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={[styles.input, styles.passwordInput]}
+                placeholder="••••••••"
+                value={formData.password}
+                onChangeText={(text) =>
+                  setFormData({ ...formData, password: text })
+                }
+                secureTextEntry={!showPassword}
+                editable={!isLoading}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Confirm Password</Text>
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={[styles.input, styles.passwordInput]}
+                placeholder="••••••••"
+                value={formData.confirmPassword}
+                onChangeText={(text) =>
+                  setFormData({ ...formData, confirmPassword: text })
+                }
+                secureTextEntry={!showPassword}
+                editable={!isLoading}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeButton}
+              >
+                <Text>{showPassword ? "👁️" : "👁️‍🗨️"}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.signupButton,
+              isLoading && styles.signupButtonDisabled,
+            ]}
+            onPress={handleSignup}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.signupButtonText}>Sign Up</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate("Login")}
+            disabled={isLoading}
+          >
+            <Text style={styles.loginLink}>
+              Already have an account?{" "}
+              <Text style={styles.loginLinkBold}>Sign In</Text>
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+  },
+  header: {
+    marginBottom: 32,
+    alignItems: "center",
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#2563eb",
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#64748b",
+  },
+  form: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#334155",
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: "#fff",
+  },
+  passwordContainer: {
+    position: "relative",
+  },
+  passwordInput: {
+    paddingRight: 48,
+  },
+  eyeButton: {
+    position: "absolute",
+    right: 12,
+    top: 12,
+  },
+  pickerContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  pickerOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  pickerOptionSelected: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  pickerOptionText: {
+    fontSize: 14,
+    color: "#334155",
+  },
+  pickerOptionTextSelected: {
+    color: "#fff",
+  },
+  levelContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  levelOption: {
+    width: 60,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    alignItems: "center",
+  },
+  levelOptionSelected: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  levelOptionText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#334155",
+  },
+  levelOptionTextSelected: {
+    color: "#fff",
+  },
+  signupButton: {
+    backgroundColor: "#2563eb",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  signupButtonDisabled: {
+    opacity: 0.6,
+  },
+  signupButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  loginLink: {
+    textAlign: "center",
+    marginTop: 20,
+    color: "#64748b",
+    fontSize: 14,
+  },
+  loginLinkBold: {
+    color: "#2563eb",
+    fontWeight: "600",
+  },
+});

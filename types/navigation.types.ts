@@ -1,18 +1,24 @@
-// types/navigation.types.ts
+// student-app/src/types/navigation.types.ts
+import { StackNavigationProp } from "@react-navigation/stack";
+import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 
 export type AuthStackParamList = {
   Login: undefined;
   Signup: undefined;
+  CourseRegistration: undefined;
 };
 
-export type TabParamList = {
+export type MainTabParamList = {
   Dashboard: undefined;
+  Classes: undefined;
   History: undefined;
   Profile: undefined;
 };
 
-// Root navigator decides between Auth flow and Main (tab) flow
 export type RootStackParamList = {
-  Auth: undefined; // goes to AuthStack
-  Main: undefined; // goes to TabNavigator
+  Auth: undefined;
+  Main: undefined;
 };
+
+export type AuthNavigationProp = StackNavigationProp<AuthStackParamList>;
+export type MainTabNavigationProp = BottomTabNavigationProp<MainTabParamList>;
